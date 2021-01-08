@@ -48,6 +48,8 @@ def augmentingPath(graph, s, t):
             rGraph[v][u] += pathFlow
             v = parent[v]
 
+    print("Finished BFS")
+
     visited = np.zeros(V, dtype=bool)
     dfs(rGraph, V, s, visited)
 
