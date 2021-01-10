@@ -147,16 +147,9 @@ def makeTLinks(graph, seeds, K):
         for j in range(c):
             x = i * c + j
             if seeds[i][j] == OBJCODE:
-                # graph[x][source] = K
-                # graph[SOURCE][x] = K
                 graph.add_edge(SOURCE, x, capacity=K)
             elif seeds[i][j] == BKGCODE:
-                # graph[x][SINK] = K
                 graph.add_edge(SINK, x, capacity=K)
-                # graph[sink][x] = K
-            # else:
-            #     graph[x][source] = LAMBDA * regionalPenalty(image[i][j], BKG)
-            #     graph[x][sink]   = LAMBDA * regionalPenalty(image[i][j], OBJ)
 
 
 def displayCut(image, cuts):
@@ -189,7 +182,6 @@ def imageSegmentation(imagefile, size=None, flag=False, algo=None, show=False):
 
     global SOURCE, SINK
 
-    cuts = []
     if algo.__name__ == "shortest_augmenting_path" and flag is False:
         start_time = time.process_time()
         cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK, capacity="capacity", flow_func=algo, two_phase=False)
@@ -269,4 +261,5 @@ if __name__ == "__main__":
     plt.ylabel("Time in seconds")
     plt.legend()
     plt.tight_layout()
+    plt.savefig("Times per size for all algorithems")
     plt.show()
