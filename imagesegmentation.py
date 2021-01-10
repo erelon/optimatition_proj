@@ -40,6 +40,7 @@ cat_yoy_points = {OBJ: [(149, 37), (89, 101), (86, 153), (93, 235), (184, 274), 
 cat_a_points = {OBJ: [(69, 119), (96, 183), (134, 221), (158, 97), (150, 154)],
                 BKG: [(29, 256), (29, 38), (193, 33), (264, 138), (262, 181), (243, 277)]}
 
+
 def show_image(image):
     windowname = "Segmentation"
     cv2.namedWindow(windowname, cv2.WINDOW_NORMAL)
@@ -66,38 +67,84 @@ def plantSeed(image, pathname):
     return seeds, None
 
 
-# Large when ip - iq < sigma, and small otherwise
-def boundaryPenalty(ip, iq):
-    bp = 100 * exp(- pow(int(ip) - int(iq), 2) / (2 * pow(SIGMA, 2)))
-    return bp
-
-
 def buildGraph(image, pathname):
     V = image.size + 2
-    graph = np.zeros((V, V), dtype='int32')
-    K = makeNLinks(graph, image)
+    if (V > 1e5):
+        raise MemoryError
+    graph = nx.Graph()
+    K, graph = makeNLinks(graph, image)
     seeds, seededImage = plantSeed(image, pathname)
     makeTLinks(graph, seeds, K)
     return graph, seededImage
 
 
+BOUNDRAY_PENALTY_CONSTANT = -2 * pow(SIGMA, 2)
+
+
+# Large when ip - iq < sigma, and small otherwise
+def boundaryPenalty(ip, iq):
+    bp = 100 * exp(pow(int(ip) - int(iq), 2) / BOUNDRAY_PENALTY_CONSTANT)
+    return bp
+
+
 def makeNLinks(graph, image):
     K = -float("inf")
-    r, c = image.shape
+    try:
+        r, c, _ = image.shape
+    except ValueError:
+        r, c = image.shape
+
+    zero_len_vec = np.expand_dims(np.zeros(image.shape[1]), axis=0)
+    Dimage = np.vstack((image, zero_len_vec))[1:, :]
+
+    zero_high_vec = np.expand_dims(np.zeros(image.shape[0]), axis=1)
+    Rimage = np.hstack((image, zero_high_vec))[:, 1:]
+
+    Dimage = 100 * np.exp(((image.astype("int16") - Dimage.astype("int16")) ** 2) / BOUNDRAY_PENALTY_CONSTANT)[:-1, :]
+    Rimage = 100 * np.exp(((image.astype("int16") - Rimage.astype("int16")) ** 2) / BOUNDRAY_PENALTY_CONSTANT)[:, :-1]
+
+    for i in range(r - 1):
+        x = np.arange(c) + (i * c)
+        s = Dimage[i, :]
+        y = np.arange(c) + ((i + 1) * c)
+        a = np.vstack((x, y, s)).T
+        graph.add_weighted_edges_from(a, weight="capacity")
+
+    for i in range(c - 1):
+        x = np.arange(r) * (r) + i
+        s = Rimage[:, i]
+        y = np.arange(r) * (r) + (i + 1)
+        a = np.vstack((x, y, s)).T
+        graph.add_weighted_edges_from(a, weight="capacity")
+
+    K = max(K, Dimage.max())
+    K = max(K, Rimage.max())
+
+    return K, graph
+
+
+def org_makeNLinks(graph, image):
+    K = -float("inf")
+    try:
+        r, c, _ = image.shape
+    except ValueError:
+        r, c = image.shape
     for i in range(r):
+        edges = []
         for j in range(c):
             x = i * c + j
             if i + 1 < r:  # pixel below
                 y = (i + 1) * c + j
                 bp = boundaryPenalty(image[i][j], image[i + 1][j])
-                graph[x][y] = graph[y][x] = bp
+                edges.append((x, y, {"capacity": bp}))
                 K = max(K, bp)
             if j + 1 < c:  # pixel to the right
                 y = i * c + j + 1
                 bp = boundaryPenalty(image[i][j], image[i][j + 1])
-                graph[x][y] = graph[y][x] = bp
+                edges.append((x, y, {"capacity": bp}))
                 K = max(K, bp)
-    return K
+        graph.add_edges_from(edges)
+    return K, graph
 
 
 def makeTLinks(graph, seeds, K):
@@ -108,9 +155,11 @@ def makeTLinks(graph, seeds, K):
             x = i * c + j
             if seeds[i][j] == OBJCODE:
                 # graph[x][source] = K
-                graph[SOURCE][x] = K
+                # graph[SOURCE][x] = K
+                graph.add_edge(SOURCE, x, capacity=K)
             elif seeds[i][j] == BKGCODE:
-                graph[x][SINK] = K
+                # graph[x][SINK] = K
+                graph.add_edge(SINK, x, capacity=K)
                 # graph[sink][x] = K
             # else:
             #     graph[x][source] = LAMBDA * regionalPenalty(image[i][j], BKG)
@@ -119,7 +168,7 @@ def makeTLinks(graph, seeds, K):
 
 def displayCut(image, cuts):
     def colorPixel(i, j):
-        image[i][j] = CUTCOLOR
+        image[int(i)][int(j)] = CUTCOLOR
 
     r, c = image.shape
     image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
@@ -134,23 +183,26 @@ def imageSegmentation(imagefile, size=(30, 30), algo="ff"):
     pathname = os.path.splitext(imagefile)[0]
     image = cv2.imread(imagefile, cv2.IMREAD_GRAYSCALE)
     image = cv2.resize(image, size)
-    graph, seededImage = buildGraph(image, pathname)
+    while True:
+        try:
+            graph, seededImage = buildGraph(image, pathname)
+            print(f"The resolution will be: {image.shape[0]}x{image.shape[1]}")
+            break
+        except MemoryError:
+            size = (int(image.shape[0] * 0.75), int(image.shape[1] * 0.75))
+            image = cv2.resize(image, size)
+            continue
 
-    g = nx.convert_matrix.from_numpy_array(graph)
-    nx.classes.set_edge_attributes(g, nx.classes.get_edge_attributes(g, "weight"), name="capacity")
-    global SOURCE,SINK
-    SOURCE, SINK = -2, -1
-
-    SOURCE += len(graph)
-    SINK += len(graph)
+    # nx.classes.set_edge_attributes(graph, nx.classes.get_edge_attributes(graph, "weight"), name="capacity")
+    global SOURCE, SINK
 
     start_time = datetime.datetime.now()
 
     cuts = []
-    cut_value, partition = nx.minimum_cut(g, SOURCE, SINK)
+    cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK)
     reachable, non_reachable = partition
     cutset = set()
-    for u, nbrs in ((n, g[n]) for n in reachable):
+    for u, nbrs in ((n, graph[n]) for n in reachable):
         cutset.update((u, v) for v in nbrs if v in non_reachable)
     cuts = sorted(cutset)
 
