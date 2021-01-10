@@ -1,24 +1,16 @@
 from __future__ import division
 
 import datetime
+import time
 
+import matplotlib.pyplot as plt
 import cv2
 import networkx as nx
 import numpy as np
 import os
-import sys
 import argparse
 from math import exp, pow
-from augmentingPath import augmentingPath
-from pushRelabel import pushRelabel
-from boykovKolmogorov import boykovKolmogorov
-from kargerMinCut import kargerMinCut
 
-# np.set_printoptions(threshold=np.inf)
-graphCutAlgo = {"ap": augmentingPath,
-                "pr": pushRelabel,
-                "bk": boykovKolmogorov,
-                "ka": kargerMinCut}
 SIGMA = 30
 # LAMBDA = 1
 OBJCOLOR, BKGCOLOR = (0, 0, 255), (0, 255, 0)
@@ -179,7 +171,7 @@ def displayCut(image, cuts):
     return image
 
 
-def imageSegmentation(imagefile, size=(30, 30), algo="ff"):
+def imageSegmentation(imagefile, size=(30, 30), flag=False, algo=None, show=False):
     pathname = os.path.splitext(imagefile)[0]
     image = cv2.imread(imagefile, cv2.IMREAD_GRAYSCALE)
     image = cv2.resize(image, size)
@@ -193,38 +185,40 @@ def imageSegmentation(imagefile, size=(30, 30), algo="ff"):
             image = cv2.resize(image, size)
             continue
 
-    # nx.classes.set_edge_attributes(graph, nx.classes.get_edge_attributes(graph, "weight"), name="capacity")
     global SOURCE, SINK
 
-    start_time = datetime.datetime.now()
-
     cuts = []
-    cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK)
+    if algo.__name__ == "shortest_augmenting_path" and flag is False:
+        start_time = time.process_time()
+        cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK, capacity="capacity", flow_func=algo, two_phase=False)
+        end_time = time.process_time()
+    elif algo.__name__ == "shortest_augmenting_path":
+        start_time = time.process_time()
+        cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK, capacity="capacity", flow_func=algo, two_phase=True)
+        end_time = time.process_time()
+    else:
+        start_time = time.process_time()
+        cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK, capacity="capacity", flow_func=algo)
+        end_time = time.process_time()
+
     reachable, non_reachable = partition
     cutset = set()
     for u, nbrs in ((n, graph[n]) for n in reachable):
         cutset.update((u, v) for v in nbrs if v in non_reachable)
     cuts = sorted(cutset)
 
-    end_time = datetime.datetime.now()
     print("cuts:")
     print(cuts)
     print("Time to calculate:")
     print(end_time - start_time)
     image = displayCut(image, cuts)
     image = cv2.resize(image, (0, 0), fx=SF, fy=SF)
-    show_image(image)
+    if show:
+        show_image(image)
     savename = pathname + "cut.jpg"
     cv2.imwrite(savename, image)
     print("Saved image as", savename)
-
-
-def parseArgs():
-    def algorithm(string):
-        if string in graphCutAlgo:
-            return string
-        raise argparse.ArgumentTypeError(
-            "Algorithm should be one of the following:", graphCutAlgo.keys())
+    return end_time - start_time, len(graph)
 
     parser = argparse.ArgumentParser()
     # parser.add_argument("imagefile")
@@ -236,6 +230,32 @@ def parseArgs():
 
 
 if __name__ == "__main__":
-    args = parseArgs()
-    for img_path in ["cat_easy.jpg", "cat_a.jpg", "cat_yoy.jpg", "cat_medium.jpg"]:
-        imageSegmentation(img_path, (args.size, args.size), args.algo)
+    import networkx.algorithms.flow as algos
+
+    flag = False
+    size = 30
+
+    total_times_for_algorithems = {}
+    for algo in [algos.boykov_kolmogorov, algos.preflow_push, algos.shortest_augmenting_path,
+                 algos.shortest_augmenting_path, algos.edmonds_karp,
+                 algos.dinitz]:
+        # algos.network_simplex ???
+        # algos.shortest_augmenting_path two_phase
+        run_data = {}
+        for img_path in ["cat_easy.jpg", "cat_a.jpg", "cat_yoy.jpg", "cat_medium.jpg"]:
+            run_time, im_size = imageSegmentation(img_path, (size, size), algo=algo, flag=flag)
+            run_data[img_path.replace(".jpg", "")] = {"run_time": run_time, "im_size": im_size}
+        total_times = [d["run_time"] for d in list(run_data.values())]
+        if algo.__name__ == "shortest_augmenting_path" and flag is False:
+            total_times_for_algorithems[algo.__name__ + " one phase"] = sum(total_times)
+            flag = True
+        elif algo.__name__ == "shortest_augmenting_path":
+            total_times_for_algorithems[algo.__name__ + " two phase"] = sum(total_times)
+        else:
+            total_times_for_algorithems[algo.__name__] = sum(total_times)
+
+    plt.scatter(total_times_for_algorithems.keys(), total_times_for_algorithems.values())
+    plt.xlabel("Algorithem")
+    plt.ylabel("Time in secondes")
+    plt.tight_layout()
+    plt.show()
