@@ -12,7 +12,7 @@ import os
 import argparse
 from math import exp, pow
 
-SIGMA = 30
+SIGMA = 20
 # LAMBDA = 1
 OBJCOLOR, BKGCOLOR = (0, 0, 255), (0, 255, 0)
 OBJCODE, BKGCODE = 1, 2
@@ -24,14 +24,6 @@ SOURCE, SINK = -2, -1
 SF = 10
 LOADSEEDS = False
 
-cat_easy_points = {OBJ: [(134, 76), (179, 101), (116, 238), (190, 202)],
-                   BKG: [(38, 41), (46, 245), (264, 58), (154, 12)]}
-cat_medium_points = {OBJ: [(122, 170), (71, 222), (196, 240), (173, 99), (63, 175), (131, 60), (145, 226)],
-                     BKG: [(267, 22), (140, 25), (15, 60), (27, 280), (145, 285), (278, 250), (281, 139)]}
-cat_yoy_points = {OBJ: [(149, 37), (89, 101), (86, 153), (93, 235), (184, 274), (216, 192), (192, 131), (174, 78)],
-                  BKG: [(182, 7), (235, 59), (285, 171), (261, 281), (82, 284), (33, 208), (40, 135), (58, 40)]}
-cat_a_points = {OBJ: [(69, 119), (96, 183), (134, 221), (158, 97), (150, 154)],
-                BKG: [(29, 256), (29, 38), (193, 33), (264, 138), (262, 181), (243, 277)]}
 
 
 def show_image(image):
@@ -52,13 +44,29 @@ def plantSeed(image, pathname):
         cv2.circle(seeds, (x // SF, y // SF), 10 // SF, code, -1)
 
     seeds = np.zeros(image.shape, dtype="uint8")
-    arr = eval(pathname + "_points");
-    for key, value in arr.items():
-        for pair in value:
-            drawLines(pair[0], pair[1], key)
+
+    f = open("seeds.txt", "r")
+    size=image.shape[0]
+    if size>100: size = "none"
+    line_str= pathname+"_"+str(size)+"\n"
+    for x in f:
+        if x == line_str:
+            x = f.readline()
+            while x != "#\n":
+                pair=x.split()
+                drawLines(int(pair[0]), int(pair[1]), OBJ)
+                x=f.readline()
+            x=f.readline()
+
+            while x != "#\n":
+                pair=x.split()
+                drawLines(int(pair[0]), int(pair[1]), BKG)
+                x=f.readline()
+        break
+
+    f.close()
 
     return seeds, None
-
 
 def buildGraph(image, pathname):
     V = image.size + 2
@@ -170,6 +178,11 @@ def imageSegmentation(imagefile, size=None, flag=False, algo=None, show=False):
     image = cv2.imread(imagefile, cv2.IMREAD_GRAYSCALE)
     if size != (None, None):
         image = cv2.resize(image, size)
+    else:
+        q,w=image.shape
+        m=min(q,w)
+        image = cv2.resize(image,(m,m))
+
     while True:
         try:
             graph, seededImage = buildGraph(image, pathname)
