@@ -2,6 +2,7 @@ from __future__ import division
 
 import datetime
 import time
+from collections import defaultdict
 
 import matplotlib.pyplot as plt
 import cv2
@@ -171,10 +172,11 @@ def displayCut(image, cuts):
     return image
 
 
-def imageSegmentation(imagefile, size=(30, 30), flag=False, algo=None, show=False):
+def imageSegmentation(imagefile, size=None, flag=False, algo=None, show=False):
     pathname = os.path.splitext(imagefile)[0]
     image = cv2.imread(imagefile, cv2.IMREAD_GRAYSCALE)
-    image = cv2.resize(image, size)
+    if size != (None, None):
+        image = cv2.resize(image, size)
     while True:
         try:
             graph, seededImage = buildGraph(image, pathname)
@@ -232,30 +234,39 @@ def imageSegmentation(imagefile, size=(30, 30), flag=False, algo=None, show=Fals
 if __name__ == "__main__":
     import networkx.algorithms.flow as algos
 
-    flag = False
-    size = 30
+    total_times_for_algorithems = defaultdict(list)
+    all_im_sizes_for_algorithem = defaultdict(list)
+    sizes = [30, 100, None]
+    for size in sizes:
+        flag = False
+        for algo in [algos.boykov_kolmogorov, algos.preflow_push, algos.shortest_augmenting_path
+            , algos.shortest_augmenting_path, algos.edmonds_karp, algos.dinitz]:
+            # algos.network_simplex ???
+            run_data = {}
+            for img_path in ["cat_easy.jpg", "cat_a.jpg", "cat_yoy.jpg", "cat_medium.jpg"]:
+                run_time, im_size = imageSegmentation(img_path, (size, size), algo=algo, flag=flag)
+                run_data[img_path.replace(".jpg", "")] = {"run_time": run_time, "im_size": im_size}
+            total_times = [d["run_time"] for d in list(run_data.values())]
 
-    total_times_for_algorithems = {}
-    for algo in [algos.boykov_kolmogorov, algos.preflow_push, algos.shortest_augmenting_path,
-                 algos.shortest_augmenting_path, algos.edmonds_karp,
-                 algos.dinitz]:
-        # algos.network_simplex ???
-        # algos.shortest_augmenting_path two_phase
-        run_data = {}
-        for img_path in ["cat_easy.jpg", "cat_a.jpg", "cat_yoy.jpg", "cat_medium.jpg"]:
-            run_time, im_size = imageSegmentation(img_path, (size, size), algo=algo, flag=flag)
-            run_data[img_path.replace(".jpg", "")] = {"run_time": run_time, "im_size": im_size}
-        total_times = [d["run_time"] for d in list(run_data.values())]
-        if algo.__name__ == "shortest_augmenting_path" and flag is False:
-            total_times_for_algorithems[algo.__name__ + " one phase"] = sum(total_times)
-            flag = True
-        elif algo.__name__ == "shortest_augmenting_path":
-            total_times_for_algorithems[algo.__name__ + " two phase"] = sum(total_times)
-        else:
-            total_times_for_algorithems[algo.__name__] = sum(total_times)
+            if algo.__name__ == "shortest_augmenting_path" and flag is False:
+                total_times_for_algorithems[algo.__name__ + " one phase"].append(sum(total_times))
+                all_im_sizes_for_algorithem[algo.__name__ + " one phase"].append(
+                    np.mean([d["im_size"] for d in list(run_data.values())]))
+                flag = True
+            elif algo.__name__ == "shortest_augmenting_path":
+                total_times_for_algorithems[algo.__name__ + " two phase"].append(sum(total_times))
+                all_im_sizes_for_algorithem[algo.__name__ + " two phase"].append(
+                    np.mean([d["im_size"] for d in list(run_data.values())]))
+            else:
+                total_times_for_algorithems[algo.__name__].append(sum(total_times))
+                all_im_sizes_for_algorithem[algo.__name__].append(
+                    np.mean([d["im_size"] for d in list(run_data.values())]))
 
-    plt.scatter(total_times_for_algorithems.keys(), total_times_for_algorithems.values())
-    plt.xlabel("Algorithem")
-    plt.ylabel("Time in secondes")
+    for kt in total_times_for_algorithems:
+        plt.plot(all_im_sizes_for_algorithem[kt], total_times_for_algorithems[kt], label=kt)
+
+    plt.xlabel("Sizes")
+    plt.ylabel("Time in seconds")
+    plt.legend()
     plt.tight_layout()
     plt.show()
