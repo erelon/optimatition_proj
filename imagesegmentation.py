@@ -25,7 +25,6 @@ SF = 10
 LOADSEEDS = False
 
 
-
 def show_image(image):
     windowname = "Segmentation"
     cv2.namedWindow(windowname, cv2.WINDOW_NORMAL)
@@ -46,27 +45,28 @@ def plantSeed(image, pathname):
     seeds = np.zeros(image.shape, dtype="uint8")
 
     f = open("seeds.txt", "r")
-    size=image.shape[0]
-    if size>100: size = "none"
-    line_str= pathname+"_"+str(size)+"\n"
+    size = image.shape[0]
+    if size > 100: size = "none"
+    line_str = pathname + "_" + str(size) + "\n"
     for x in f:
         if x == line_str:
             x = f.readline()
             while x != "#\n":
-                pair=x.split()
+                pair = x.split()
                 drawLines(int(pair[0]), int(pair[1]), OBJ)
-                x=f.readline()
-            x=f.readline()
+                x = f.readline()
+            x = f.readline()
 
             while x != "#\n":
-                pair=x.split()
+                pair = x.split()
                 drawLines(int(pair[0]), int(pair[1]), BKG)
-                x=f.readline()
+                x = f.readline()
         break
 
     f.close()
 
     return seeds, None
+
 
 def buildGraph(image, pathname):
     V = image.size + 2
@@ -179,9 +179,9 @@ def imageSegmentation(imagefile, size=None, flag=False, algo=None, show=False):
     if size != (None, None):
         image = cv2.resize(image, size)
     else:
-        q,w=image.shape
-        m=min(q,w)
-        image = cv2.resize(image,(m,m))
+        q, w = image.shape
+        m = min(q, w)
+        image = cv2.resize(image, (m, m))
 
     while True:
         try:
@@ -227,14 +227,6 @@ def imageSegmentation(imagefile, size=None, flag=False, algo=None, show=False):
     print("Saved image as", savename)
     return end_time - start_time, len(graph)
 
-    parser = argparse.ArgumentParser()
-    # parser.add_argument("imagefile")
-    parser.add_argument("--size", "-s",
-                        default=30, type=int,
-                        help="Defaults to 30x30")
-    parser.add_argument("--algo", "-a", default="ap", type=algorithm)
-    return parser.parse_args()
-
 
 if __name__ == "__main__":
     import networkx.algorithms.flow as algos
@@ -248,7 +240,7 @@ if __name__ == "__main__":
             , algos.shortest_augmenting_path, algos.edmonds_karp, algos.dinitz]:
             # algos.network_simplex ???
             run_data = {}
-            for img_path in ["cat_easy.jpg", "cat_a.jpg", "cat_yoy.jpg", "cat_medium.jpg"]:
+            for img_path in ["cat_a.jpg", "cat_yoy.jpg", "cat_medium.jpg"]:  # "cat_easy.jpg"
                 run_time, im_size = imageSegmentation(img_path, (size, size), algo=algo, flag=flag)
                 run_data[img_path.replace(".jpg", "")] = {"run_time": run_time, "im_size": im_size}
             total_times = [d["run_time"] for d in list(run_data.values())]
