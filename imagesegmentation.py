@@ -25,7 +25,6 @@ SF = 10
 LOADSEEDS = False
 
 
-
 def show_image(image):
     windowname = "Segmentation"
     cv2.namedWindow(windowname, cv2.WINDOW_NORMAL)
@@ -33,6 +32,7 @@ def show_image(image):
     cv2.imshow(windowname, image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+
 
 
 def plantSeed(image, pathname):
@@ -46,27 +46,29 @@ def plantSeed(image, pathname):
     seeds = np.zeros(image.shape, dtype="uint8")
 
     f = open("seeds.txt", "r")
-    size=image.shape[0]
-    if size>100: size = "none"
-    line_str= pathname+"_"+str(size)+"\n"
+    size = image.shape[0]
+    if size > 100: size = "none"
+    line_str = pathname + "_" + str(size) + "\n"
     for x in f:
         if x == line_str:
             x = f.readline()
             while x != "#\n":
-                pair=x.split()
+                pair = x.split()
                 drawLines(int(pair[0]), int(pair[1]), OBJ)
-                x=f.readline()
-            x=f.readline()
+                x = f.readline()
+            x = f.readline()
 
             while x != "#\n":
-                pair=x.split()
+                pair = x.split()
                 drawLines(int(pair[0]), int(pair[1]), BKG)
-                x=f.readline()
-        break
+                x = f.readline()
+            break
 
     f.close()
 
     return seeds, None
+
+
 
 def buildGraph(image, pathname):
     V = image.size + 2
@@ -174,14 +176,15 @@ def displayCut(image, cuts):
 
 
 def imageSegmentation(imagefile, size=None, flag=False, algo=None, show=False):
+    print(algo.__name__)
     pathname = os.path.splitext(imagefile)[0]
     image = cv2.imread(imagefile, cv2.IMREAD_GRAYSCALE)
     if size != (None, None):
         image = cv2.resize(image, size)
     else:
-        q,w=image.shape
-        m=min(q,w)
-        image = cv2.resize(image,(m,m))
+        q, w = image.shape
+        m = min(q, w)
+        image = cv2.resize(image, (m, m))
 
     while True:
         try:
@@ -245,7 +248,7 @@ if __name__ == "__main__":
     for size in sizes:
         flag = False
         for algo in [algos.boykov_kolmogorov, algos.preflow_push, algos.shortest_augmenting_path
-            , algos.shortest_augmenting_path, algos.edmonds_karp, algos.dinitz]:
+            , algos.shortest_augmenting_path,algos.dinitz, algos.edmonds_karp]:
             # algos.network_simplex ???
             run_data = {}
             for img_path in ["cat_easy.jpg", "cat_a.jpg", "cat_yoy.jpg", "cat_medium.jpg"]:
