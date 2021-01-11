@@ -34,6 +34,7 @@ def show_image(image):
     cv2.destroyAllWindows()
 
 
+
 def plantSeed(image, pathname):
     def drawLines(x, y, pixelType):
         code = BKGCODE
@@ -61,12 +62,11 @@ def plantSeed(image, pathname):
                 pair = x.split()
                 drawLines(int(pair[0]), int(pair[1]), BKG)
                 x = f.readline()
-        break
+            break
 
     f.close()
 
     return seeds, None
-
 
 def buildGraph(image, pathname):
     V = image.size + 2
@@ -174,6 +174,7 @@ def displayCut(image, cuts):
 
 
 def imageSegmentation(imagefile, size=None, flag=False, algo=None, show=False):
+    print(algo.__name__)
     pathname = os.path.splitext(imagefile)[0]
     image = cv2.imread(imagefile, cv2.IMREAD_GRAYSCALE)
     if size != (None, None):
@@ -237,7 +238,7 @@ if __name__ == "__main__":
     for size in sizes:
         flag = False
         for algo in [algos.boykov_kolmogorov, algos.preflow_push, algos.shortest_augmenting_path
-            , algos.shortest_augmenting_path, algos.edmonds_karp, algos.dinitz]:
+            , algos.shortest_augmenting_path,algos.dinitz, algos.edmonds_karp]:
             # algos.network_simplex ???
             run_data = {}
             for img_path in ["cat_a.jpg", "cat_yoy.jpg", "cat_medium.jpg"]:  # "cat_easy.jpg"
