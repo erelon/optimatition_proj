@@ -1,6 +1,7 @@
 from __future__ import division
 
 import datetime
+import pickle
 import time
 from collections import defaultdict
 
@@ -11,6 +12,10 @@ import numpy as np
 import os
 import argparse
 from math import exp, pow
+
+import scipy
+
+from simcut import sim_cut
 
 SIGMA = 20
 # LAMBDA = 1
@@ -32,7 +37,6 @@ def show_image(image):
     cv2.imshow(windowname, image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-
 
 
 def plantSeed(image, pathname):
@@ -68,7 +72,8 @@ def plantSeed(image, pathname):
 
     return seeds, None
 
-def buildGraph(image, pathname):
+
+def buildGraph(image, pathname, sigma=30):
     V = image.size + 2
     if (V > 1e5):
         raise MemoryError
@@ -79,16 +84,9 @@ def buildGraph(image, pathname):
     return graph, seededImage
 
 
-BOUNDRAY_PENALTY_CONSTANT = -2 * pow(SIGMA, 2)
+def makeNLinks(graph, image, sigma=30):
+    BOUNDRAY_PENALTY_CONSTANT = -2 * pow(sigma, 2)
 
-
-# Large when ip - iq < sigma, and small otherwise
-def boundaryPenalty(ip, iq):
-    bp = 100 * exp(pow(int(ip) - int(iq), 2) / BOUNDRAY_PENALTY_CONSTANT)
-    return bp
-
-
-def makeNLinks(graph, image):
     K = -float("inf")
     try:
         r, c, _ = image.shape
@@ -124,28 +122,33 @@ def makeNLinks(graph, image):
     return K, graph
 
 
-def org_makeNLinks(graph, image):
-    K = -float("inf")
-    try:
-        r, c, _ = image.shape
-    except ValueError:
-        r, c = image.shape
-    for i in range(r):
-        edges = []
-        for j in range(c):
-            x = i * c + j
-            if i + 1 < r:  # pixel below
-                y = (i + 1) * c + j
-                bp = boundaryPenalty(image[i][j], image[i + 1][j])
-                edges.append((x, y, {"capacity": bp}))
-                K = max(K, bp)
-            if j + 1 < c:  # pixel to the right
-                y = i * c + j + 1
-                bp = boundaryPenalty(image[i][j], image[i][j + 1])
-                edges.append((x, y, {"capacity": bp}))
-                K = max(K, bp)
-        graph.add_edges_from(edges)
-    return K, graph
+# Large when ip - iq < sigma, and small otherwise
+# def boundaryPenalty(ip, iq):
+#     bp = 100 * exp(pow(int(ip) - int(iq), 2) / BOUNDRAY_PENALTY_CONSTANT)
+#     return bp
+
+# def org_makeNLinks(graph, image):
+#     K = -float("inf")
+#     try:
+#         r, c, _ = image.shape
+#     except ValueError:
+#         r, c = image.shape
+#     for i in range(r):
+#         edges = []
+#         for j in range(c):
+#             x = i * c + j
+#             if i + 1 < r:  # pixel below
+#                 y = (i + 1) * c + j
+#                 bp = boundaryPenalty(image[i][j], image[i + 1][j])
+#                 edges.append((x, y, {"capacity": bp}))
+#                 K = max(K, bp)
+#             if j + 1 < c:  # pixel to the right
+#                 y = i * c + j + 1
+#                 bp = boundaryPenalty(image[i][j], image[i][j + 1])
+#                 edges.append((x, y, {"capacity": bp}))
+#                 K = max(K, bp)
+#         graph.add_edges_from(edges)
+#     return K, graph
 
 
 def makeTLinks(graph, seeds, K):
@@ -173,8 +176,7 @@ def displayCut(image, cuts):
     return image
 
 
-def imageSegmentation(imagefile, size=None, flag=False, algo=None, show=False):
-    print(algo.__name__)
+def create_graph_from_img(imagefile, size=None):
     pathname = os.path.splitext(imagefile)[0]
     image = cv2.imread(imagefile, cv2.IMREAD_GRAYSCALE)
     if size != (None, None):
@@ -184,37 +186,74 @@ def imageSegmentation(imagefile, size=None, flag=False, algo=None, show=False):
         m = min(q, w)
         image = cv2.resize(image, (m, m))
 
+    sigma = SIGMA
     while True:
         try:
-            graph, seededImage = buildGraph(image, pathname)
+            graph, seededImage = buildGraph(image, pathname, sigma=sigma)
             print(f"The resolution will be: {image.shape[0]}x{image.shape[1]}")
+            size = (int(image.shape[0]), int(image.shape[1]))
             break
         except MemoryError:
             size = (int(image.shape[0] * 0.75), int(image.shape[1] * 0.75))
             image = cv2.resize(image, size)
             continue
+    return graph, image, size, pathname
 
+
+def imageSegmentation(graph, image, size, pathname, flag=False, algo=None, algo_name=None, show=False):
+    print(algo_name)
+
+    sigma = SIGMA
     global SOURCE, SINK
+    found_good_sigma = False
+    while not found_good_sigma:
+        if algo_name == "shortest_augmenting_path" and flag is False:
+            start_time = time.process_time()
+            cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK, capacity="capacity", flow_func=algo,
+                                                  two_phase=False)
+            end_time = time.process_time()
 
-    if algo.__name__ == "shortest_augmenting_path" and flag is False:
-        start_time = time.process_time()
-        cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK, capacity="capacity", flow_func=algo, two_phase=False)
-        end_time = time.process_time()
-    elif algo.__name__ == "shortest_augmenting_path":
-        start_time = time.process_time()
-        cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK, capacity="capacity", flow_func=algo, two_phase=True)
-        end_time = time.process_time()
-    else:
-        start_time = time.process_time()
-        cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK, capacity="capacity", flow_func=algo)
-        end_time = time.process_time()
+        elif algo_name == "shortest_augmenting_path":
+            start_time = time.process_time()
+            cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK, capacity="capacity", flow_func=algo,
+                                                  two_phase=True)
+            end_time = time.process_time()
+        elif "sim_cut" in algo_name:
+            start_time = time.process_time()
+            segmentation = algo(graph, SOURCE, SINK)
+            end_time = time.process_time()
+            # end of calculation - make the data look like the other algorithems
+            segmentation = (segmentation.reshape(size))
+            imax = (scipy.ndimage.maximum_filter(segmentation, size=3) != segmentation)
+            # keep only pixels of original image at borders
+            edges = np.where(imax, 1, -1).reshape(size[0] ** 2)
+            cuts = []
+            for node in np.where(edges > 0)[0]:
+                if node < (len(graph) - 2):
+                    cuts.append((node, node))
+        else:
+            start_time = time.process_time()
+            cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK, capacity="capacity", flow_func=algo)
+            end_time = time.process_time()
 
-    reachable, non_reachable = partition
-    cutset = set()
-    for u, nbrs in ((n, graph[n]) for n in reachable):
-        cutset.update((u, v) for v in nbrs if v in non_reachable)
-    cuts = sorted(cutset)
-
+        try:
+            reachable, non_reachable = partition
+            cutset_clean = set()
+            for u, nbrs in ((n, graph[n]) for n in reachable):
+                cutset_clean.update((u, v) for v in nbrs if v in non_reachable)
+            if len(cutset_clean) == 0:
+                sigma += 10
+                print(f"trying another sigma. sigma={sigma}")
+                if sigma > 100:
+                    found_good_sigma = True
+                    cuts = sorted(cutset_clean)
+                    print("Can't find a good sigma")
+                graph, seededImage = buildGraph(image, pathname, sigma=sigma)
+            else:
+                found_good_sigma = True
+                cuts = sorted(cutset_clean)
+        except:
+            break
     print("cuts:")
     print(cuts)
     print("Time to calculate:")
@@ -223,7 +262,8 @@ def imageSegmentation(imagefile, size=None, flag=False, algo=None, show=False):
     image = cv2.resize(image, (0, 0), fx=SF, fy=SF)
     if show:
         show_image(image)
-    savename = pathname + "cut.jpg"
+    os.makedirs(f"{pathname} results", exist_ok=True)
+    savename = f"{pathname} results/ {algo_name}_{size}_result.jpg"
     cv2.imwrite(savename, image)
     print("Saved image as", savename)
     return end_time - start_time, len(graph)
@@ -232,40 +272,73 @@ def imageSegmentation(imagefile, size=None, flag=False, algo=None, show=False):
 if __name__ == "__main__":
     import networkx.algorithms.flow as algos
 
-    total_times_for_algorithems = defaultdict(list)
-    all_im_sizes_for_algorithem = defaultdict(list)
-    sizes = [30, 100, None]
-    for size in sizes:
+
+    def dd():
+        return defaultdict(dict)
+
+
+    all_runs_data = defaultdict(dd)
+    try:
+        with open("pickled_data", "rb") as f:
+            all_runs_data = pickle.load(f)
+            f.close()
+    except:
+        pass
+
+    target_sizes = [30, 100, None]
+    for size in target_sizes:
         flag = False
-        for algo in [algos.boykov_kolmogorov, algos.preflow_push, algos.shortest_augmenting_path
-            , algos.shortest_augmenting_path,algos.dinitz, algos.edmonds_karp]:
-            # algos.network_simplex ???
-            run_data = {}
-            for img_path in ["cat_a.jpg", "cat_yoy.jpg", "cat_medium.jpg"]:  # "cat_easy.jpg"
-                run_time, im_size = imageSegmentation(img_path, (size, size), algo=algo, flag=flag)
-                run_data[img_path.replace(".jpg", "")] = {"run_time": run_time, "im_size": im_size}
-            total_times = [d["run_time"] for d in list(run_data.values())]
+        for algo in [algos.dinitz, algos.edmonds_karp]:#sim_cut, algos.boykov_kolmogorov, algos.preflow_push,algos.shortest_augmenting_path,algos.shortest_augmenting_path]:
+            # , algos.dinitz, algos.edmonds_karp,
+            # ]:
 
             if algo.__name__ == "shortest_augmenting_path" and flag is False:
-                total_times_for_algorithems[algo.__name__ + " one phase"].append(sum(total_times))
-                all_im_sizes_for_algorithem[algo.__name__ + " one phase"].append(
-                    np.mean([d["im_size"] for d in list(run_data.values())]))
-                flag = True
-            elif algo.__name__ == "shortest_augmenting_path":
-                total_times_for_algorithems[algo.__name__ + " two phase"].append(sum(total_times))
-                all_im_sizes_for_algorithem[algo.__name__ + " two phase"].append(
-                    np.mean([d["im_size"] for d in list(run_data.values())]))
+                algo_name = algo.__name__ + " one phase"
+            elif algo.__name__ == "shortest_augmenting_path" and flag is True:
+                algo_name = algo.__name__ + " two phase"
+            elif algo.__name__ == "sim_cut":
+                algo_name = "sim_cut_two_iter"
             else:
-                total_times_for_algorithems[algo.__name__].append(sum(total_times))
-                all_im_sizes_for_algorithem[algo.__name__].append(
-                    np.mean([d["im_size"] for d in list(run_data.values())]))
+                algo_name = algo.__name__
 
-    for kt in total_times_for_algorithems:
-        plt.plot(all_im_sizes_for_algorithem[kt], total_times_for_algorithems[kt], label=kt)
+            run_data = {}
+            for img_path in ["cat_a.jpg", "cat_yoy.jpg", "cat_medium.jpg", "cat_easy.jpg"]:
+                graph, image, size_, pathname = create_graph_from_img(img_path, size=(size, size))
+                try:
+                    all_runs_data[algo_name][len(graph)][img_path.replace(".jpg", "")]
+                    # This data was collected allready
+                    continue
+                except:
+                    pass
+                run_time, im_size = imageSegmentation(graph, image, size_, pathname, algo=algo, algo_name=algo_name,
+                                                      flag=flag, show=False)
+                all_runs_data[algo_name][len(graph)][img_path.replace(".jpg", "")] = run_time
 
+            if algo.__name__ == "shortest_augmenting_path" and flag is False:
+                flag = True
+
+            with open("pickled_data", "wb") as f:
+                pickle.dump(all_runs_data, f)
+                f.close()
+
+    index_of_free_size = target_sizes.index(None)
+    for algo_name, D_1 in zip(all_runs_data.keys(), all_runs_data.values()):
+        all_avg_times_of_all_sizes = []
+        sizes = []
+        for size, D_2 in zip(D_1.keys(), D_1.values()):
+            all_imgs_run_time = []
+            sizes.append(size)
+            for img, run_time in zip(D_2.keys(), D_2.values()):
+                all_imgs_run_time.append(run_time)
+            avg_time_for_all_imgs = np.mean(all_imgs_run_time)
+            all_avg_times_of_all_sizes.append(avg_time_for_all_imgs)
+        all_avg_times_of_all_sizes = np.append(np.array(all_avg_times_of_all_sizes[:index_of_free_size]),
+                                               np.mean(all_avg_times_of_all_sizes[index_of_free_size:]))
+        sizes = np.append(np.array(sizes[:index_of_free_size]), (np.mean(sizes[index_of_free_size:])))
+        plt.plot(sizes, all_avg_times_of_all_sizes, label=algo_name)
     plt.xlabel("Sizes")
     plt.ylabel("Time in seconds")
     plt.legend()
     plt.tight_layout()
-    plt.savefig("Times per size for all algorithems")
+    plt.savefig("Times per size for all algorithems.svg")
     plt.show()
