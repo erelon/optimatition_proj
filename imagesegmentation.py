@@ -219,9 +219,10 @@ def imageSegmentation(graph, image, size, pathname, flag=False, algo=None, algo_
                                                   two_phase=True)
             end_time = time.process_time()
         elif "sim_cut" in algo_name:
-            start_time = time.process_time()
+            start_time = time.time()
             segmentation = algo(graph, SOURCE, SINK)
-            end_time = time.process_time()
+            end_time = time.time()
+            print(end_time - start_time)
             # end of calculation - make the data look like the other algorithems
             segmentation = (segmentation.reshape(size))
             imax = (scipy.ndimage.maximum_filter(segmentation, size=3) != segmentation)
@@ -272,7 +273,7 @@ def imageSegmentation(graph, image, size, pathname, flag=False, algo=None, algo_
 if __name__ == "__main__":
     import networkx.algorithms.flow as algos
 
-
+    from scikits.umfpack import spsolve
     def dd():
         return defaultdict(dict)
 
@@ -288,7 +289,8 @@ if __name__ == "__main__":
     target_sizes = [30, 100, None]
     for size in target_sizes:
         flag = False
-        for algo in [algos.dinitz, algos.edmonds_karp]:#sim_cut, algos.boykov_kolmogorov, algos.preflow_push,algos.shortest_augmenting_path,algos.shortest_augmenting_path]:
+        for algo in [
+            sim_cut]:  # sim_cut, algos.boykov_kolmogorov, algos.preflow_push,algos.shortest_augmenting_path,algos.shortest_augmenting_path]:
             # , algos.dinitz, algos.edmonds_karp,
             # ]:
 
@@ -297,12 +299,12 @@ if __name__ == "__main__":
             elif algo.__name__ == "shortest_augmenting_path" and flag is True:
                 algo_name = algo.__name__ + " two phase"
             elif algo.__name__ == "sim_cut":
-                algo_name = "sim_cut_two_iter"
+                algo_name = "sim_cut_20_iter_better_implement"
             else:
                 algo_name = algo.__name__
 
             run_data = {}
-            for img_path in ["cat_a.jpg", "cat_yoy.jpg", "cat_medium.jpg", "cat_easy.jpg"]:
+            for img_path in ["cat_easy.jpg", "cat_a.jpg", "cat_yoy.jpg", "cat_medium.jpg"]:
                 graph, image, size_, pathname = create_graph_from_img(img_path, size=(size, size))
                 try:
                     all_runs_data[algo_name][len(graph)][img_path.replace(".jpg", "")]
