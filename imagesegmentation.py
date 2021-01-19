@@ -82,6 +82,7 @@ def buildGraph(image, pathname, sigma=30):
     seeds, seededImage = plantSeed(image, pathname)
     makeTLinks(graph, seeds, K)
 
+    # # Fast way to save the seeds on the image
     # kk = []
     # for x in seeds.flatten():
     #     if x == 0:
