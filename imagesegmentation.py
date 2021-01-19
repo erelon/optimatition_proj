@@ -78,9 +78,24 @@ def buildGraph(image, pathname, sigma=30):
     if (V > 1e5):
         raise MemoryError
     graph = nx.Graph()
-    K, graph = makeNLinks(graph, image)
+    K, graph = makeNLinks(graph, image, sigma=sigma)
     seeds, seededImage = plantSeed(image, pathname)
     makeTLinks(graph, seeds, K)
+
+    # kk = []
+    # for x in seeds.flatten():
+    #     if x == 0:
+    #         kk.append((0, 0, 0, 0))
+    #     if x == 1:
+    #         kk.append((255, 0, 0, 150))
+    #     if x == 2:
+    #         kk.append((0, 255, 0, 150))
+    # k1 = np.array(kk)
+    # plt.imshow(image, cmap="gray")
+    # plt.imshow(k1.reshape(image.shape[0], image.shape[0], 4))
+    # plt.axis("off")
+    # plt.tight_layout()
+    # plt.savefig(f"seeded_cats/{pathname}_{image.shape[0]}.png", bbox_inches='tight', pad_inches=0)
     return graph, seededImage
 
 
@@ -273,7 +288,7 @@ def imageSegmentation(graph, image, size, pathname, flag=False, algo=None, algo_
 if __name__ == "__main__":
     import networkx.algorithms.flow as algos
 
-    from scikits.umfpack import spsolve
+
     def dd():
         return defaultdict(dict)
 
@@ -289,8 +304,8 @@ if __name__ == "__main__":
     target_sizes = [30, 100, None]
     for size in target_sizes:
         flag = False
-        for algo in [
-            sim_cut]:  # sim_cut, algos.boykov_kolmogorov, algos.preflow_push,algos.shortest_augmenting_path,algos.shortest_augmenting_path]:
+        for algo in [algos.preflow_push,
+                     sim_cut]:  # sim_cut, algos.boykov_kolmogorov, algos.preflow_push,algos.shortest_augmenting_path,algos.shortest_augmenting_path]:
             # , algos.dinitz, algos.edmonds_karp,
             # ]:
 
@@ -339,6 +354,8 @@ if __name__ == "__main__":
         sizes = np.append(np.array(sizes[:index_of_free_size]), (np.mean(sizes[index_of_free_size:])))
         plt.plot(sizes, all_avg_times_of_all_sizes, label=algo_name)
     plt.xlabel("Sizes")
+    plt.xscale("symlog")
+    plt.yscale("symlog")
     plt.ylabel("Time in seconds")
     plt.legend()
     plt.tight_layout()
