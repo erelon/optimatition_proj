@@ -301,13 +301,12 @@ if __name__ == "__main__":
     except:
         pass
 
+    # If None - the run will choose the size
     target_sizes = [30, 100, None]
     for size in target_sizes:
         flag = False
-        for algo in [algos.preflow_push,
-                     sim_cut]:  # sim_cut, algos.boykov_kolmogorov, algos.preflow_push,algos.shortest_augmenting_path,algos.shortest_augmenting_path]:
-            # , algos.dinitz, algos.edmonds_karp,
-            # ]:
+        for algo in [algos.preflow_push, sim_cut, algos.boykov_kolmogorov, algos.preflow_push,
+                     algos.shortest_augmenting_path, algos.shortest_augmenting_path, algos.dinitz, algos.edmonds_karp]:
 
             if algo.__name__ == "shortest_augmenting_path" and flag is False:
                 algo_name = algo.__name__ + " one phase"
