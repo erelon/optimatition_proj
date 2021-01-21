@@ -1,59 +1,71 @@
 from __future__ import division
 
-import datetime
-import pickle
-import time
-from collections import defaultdict
-import sys
+import networkx.algorithms.flow as algos
 import matplotlib.pyplot as plt
-import cv2
 import networkx as nx
 import numpy as np
-import os
-import argparse
-from math import exp, pow
-
+import pickle
 import scipy
+import time
+import cv2
+import sys
+import os
 
+from collections import defaultdict
 from simcut import sim_cut
 
-SIGMA = 20
-# LAMBDA = 1
 OBJCOLOR, BKGCOLOR = (0, 0, 255), (0, 255, 0)
 OBJCODE, BKGCODE = 1, 2
 OBJ, BKG = "OBJ", "BKG"
-
 CUTCOLOR = (0, 0, 255)
 SOURCE, SINK = -2, -1
+SIGMA = 30
+SF = 10
 
 # plant seeds option
 MANUAL = False
 # plant seeds only ones for every image size and type
 MANUAL_FIRST = False
-
-SF = 10
 LOADSEEDS = False
 
 
-def show_image(image):
-    windowname = "Segmentation"
-    cv2.namedWindow(windowname, cv2.WINDOW_NORMAL)
+def show_image(image: np.ndarray):
+    """
+    Shows an image using cv2 library
+    :param image: The image to show.
+    :return: Nothing
+    """
+    cv2.namedWindow("", cv2.WINDOW_NORMAL)
     cv2.startWindowThread()
-    cv2.imshow(windowname, image)
+    cv2.imshow("", image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-def plantSeed_manual(image, m):
+
+def plant_seed_manual(image: np.ndarray, m):
+    """
+    Show a window prompt to choose the seeds manually
+    :param image: The image to add the seeds on
+    :param m:
+    :return:
+    """
     first = MANUAL_FIRST
     if first:
+        # Create the seed file for the graph building
         f = open("seeds1.txt", 'a')
-        shape_str = 'none' if  image.shape[0] > 100 else str(image.shape[0])
-        f.write(m.split('.')[0]+"_"+shape_str+"\n")
+        shape_str = 'none' if image.shape[0] > 100 else str(image.shape[0])
+        f.write(m.split('.')[0] + "_" + shape_str + "\n")
 
-
-    def drawLines(x, y, pixelType):
+    def draw_lines(x, y, pixelType):
+        """
+        Draw a pixel on the image
+        :param x: The x coordinate of the seed
+        :param y: The y coordinate of the seed
+        :param pixelType: The color of the pixel
+        :return: None
+        """
         if first:
-            f.write(str(x)+' '+str(y)+"\n")
+            f.write(str(x) + ' ' + str(y) + "\n")
         if pixelType == OBJ:
             color, code = OBJCOLOR, OBJCODE
         else:
@@ -61,25 +73,38 @@ def plantSeed_manual(image, m):
         cv2.circle(image, (x, y), radius, color, thickness)
         cv2.circle(seeds, (x // SF, y // SF), radius // SF, code, thickness)
 
-    def onMouse(event, x, y, flags, pixelType):
-
+    def on_mouse(event, x, y, flags, pixelType):
+        """
+        Follow mouse click
+        :param event: The event handler
+        :param x: The x coordinate of the mouse
+        :param y: The y coordinate of the mouse
+        :param flags:
+        :param pixelType: The pixel color
+        :return: None
+        """
         global drawing
         if event == cv2.EVENT_LBUTTONDOWN:
             drawing = True
-            drawLines(x, y, pixelType)
+            draw_lines(x, y, pixelType)
         elif event == cv2.EVENT_MOUSEMOVE and drawing:
-            drawLines(x, y, pixelType)
+            draw_lines(x, y, pixelType)
         elif event == cv2.EVENT_LBUTTONUP:
             drawing = False
 
-    def paintSeeds(pixelType):
+    def paint_seeds(pixelType):
+        """
+        Paint the seeds on the image
+        :param pixelType:
+        :return:
+        """
         print("Planting", pixelType, "seeds")
         global drawing
         drawing = False
         windowname = "Plant " + pixelType + " seeds"
         cv2.namedWindow(windowname, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(windowname, 500, 500)
-        cv2.setMouseCallback(windowname, onMouse, pixelType)
+        cv2.setMouseCallback(windowname, on_mouse, pixelType)
         while (1):
             cv2.imshow(windowname, image)
             if cv2.waitKey(1) & 0xFF == 27:
@@ -97,14 +122,20 @@ def plantSeed_manual(image, m):
     global drawing
     drawing = False
 
-    paintSeeds(OBJ)
-    paintSeeds(BKG)
+    paint_seeds(OBJ)
+    paint_seeds(BKG)
     if first:
         f.close()
     return seeds, image
 
 
-def plantSeed(image, pathname):
+def plant_seed(image: np.ndarray, pathname: str):
+    """
+    Opens image and seed, and adds the seed onto the image
+    :param image: The image to load
+    :param pathname: The name tof the image
+    :return: The seeds
+    """
     seeds_file = "seeds.txt"
     if MANUAL:
         seeds_file = "seeds1.txt"
@@ -136,112 +167,106 @@ def plantSeed(image, pathname):
                 drawLines(int(pair[0]), int(pair[1]), BKG)
                 x = f.readline()
             break
-
     f.close()
 
     return seeds, None
-#
 
 
-def buildGraph(image, pathname, sigma=30):
+def build_graph(image: np.ndarray, pathname: str, sigma: int = 30, save_seeded_image: bool = False):
+    """
+    Build the graph from the image
+    :param image: The image to build the graph from
+    :param pathname: The name of the image
+    :param sigma: The sigma to use for calculating the capacity value
+    :param save_seeded_image: Should the image with the seed be saved
+    :return: The graph and the seeded image
+    """
     V = image.size + 2
     if (V > 1e5):
         raise MemoryError
     graph = nx.Graph()
-    K, graph = makeNLinks(graph, image, sigma=sigma)
+    K, graph = make_N_links(graph, image, sigma=sigma)
     if MANUAL_FIRST and MANUAL:
-        seeds, seededImage = plantSeed_manual(image, pathname)
+        seeds, seededImage = plant_seed_manual(image, pathname)
     else:
-        seeds, seededImage = plantSeed(image, pathname)
+        seeds, seededImage = plant_seed(image, pathname)
 
-    makeTLinks(graph, seeds, K)
+    make_T_links(graph, seeds, K)
 
-    # # Fast way to save the seeds on the image
-    # kk = []
-    # for x in seeds.flatten():
-    #     if x == 0:
-    #         kk.append((0, 0, 0, 0))
-    #     if x == 1:
-    #         kk.append((255, 0, 0, 150))
-    #     if x == 2:
-    #         kk.append((0, 255, 0, 150))
-    # k1 = np.array(kk)
-    # plt.imshow(image, cmap="gray")
-    # plt.imshow(k1.reshape(image.shape[0], image.shape[0], 4))
-    # plt.axis("off")
-    # plt.tight_layout()
-    # plt.savefig(f"seeded_cats/{pathname}_{image.shape[0]}.png", bbox_inches='tight', pad_inches=0)
+    if save_seeded_image:
+        # Fast way to save the seeds on the image
+        pixels = []
+        for x in seeds.flatten():
+            if x == 0:
+                pixels.append((0, 0, 0, 0))
+            if x == 1:
+                pixels.append((255, 0, 0, 150))
+            if x == 2:
+                pixels.append((0, 255, 0, 150))
+        np_pixels = np.array(pixels)
+        plt.imshow(image, cmap="gray")
+        plt.imshow(np_pixels.reshape(image.shape[0], image.shape[0], 4))
+        plt.axis("off")
+        plt.tight_layout()
+        os.makedirs("seeded_cats", exist_ok=True)
+        plt.savefig(f"seeded_cats/{pathname}_{image.shape[0]}.png", bbox_inches='tight', pad_inches=0)
     return graph, seededImage
 
 
-def makeNLinks(graph, image, sigma=30):
-    BOUNDRAY_PENALTY_CONSTANT = -2 * pow(sigma, 2)
+def make_N_links(graph, image, sigma=30):
+    """
+    Create the N links of the graph from the image.
+    :param graph: The graph to add the capacity on
+    :param image: The image of reference
+    :param sigma: The sigma to use in the calculation
+    :return: The K value for the T links and the graph
+    """
+    BOUNDRAY_PENALTY_CONSTANT = -2 * (sigma ** 2)
 
     K = -float("inf")
-    try:
-        r, c, _ = image.shape
-    except ValueError:
-        r, c = image.shape
+    r, c = image.shape
 
+    # Create a mask for all pixels under the original pixels
     zero_len_vec = np.expand_dims(np.zeros(image.shape[1]), axis=0)
     Dimage = np.vstack((image, zero_len_vec))[1:, :]
 
+    # Create a mask for all pixels to the right of the original pixels
     zero_high_vec = np.expand_dims(np.zeros(image.shape[0]), axis=1)
     Rimage = np.hstack((image, zero_high_vec))[:, 1:]
 
+    # Calculate the links between the rows
     Dimage = 100 * np.exp(((image.astype("int16") - Dimage.astype("int16")) ** 2) / BOUNDRAY_PENALTY_CONSTANT)[:-1, :]
+    # Calculate the links between the cols
     Rimage = 100 * np.exp(((image.astype("int16") - Rimage.astype("int16")) ** 2) / BOUNDRAY_PENALTY_CONSTANT)[:, :-1]
 
+    # Create the nodes of the graph and define the capacity of the rows
     for i in range(r - 1):
         x = np.arange(c) + (i * c)
         s = Dimage[i, :]
         y = np.arange(c) + ((i + 1) * c)
         a = np.vstack((x, y, s)).T
         graph.add_weighted_edges_from(a, weight="capacity")
-
+    # Define the capacity of the cols
     for i in range(c - 1):
         x = np.arange(r) * (r) + i
         s = Rimage[:, i]
         y = np.arange(r) * (r) + (i + 1)
         a = np.vstack((x, y, s)).T
         graph.add_weighted_edges_from(a, weight="capacity")
-
-    K = max(K, Dimage.max())
-    K = max(K, Rimage.max())
+    # Define K to be the maximum capacity in the graph
+    K = max(max(K, Dimage.max()), max(K, Rimage.max()))
 
     return K, graph
 
 
-# Large when ip - iq < sigma, and small otherwise
-# def boundaryPenalty(ip, iq):
-#     bp = 100 * exp(pow(int(ip) - int(iq), 2) / BOUNDRAY_PENALTY_CONSTANT)
-#     return bp
-
-# def org_makeNLinks(graph, image):
-#     K = -float("inf")
-#     try:
-#         r, c, _ = image.shape
-#     except ValueError:
-#         r, c = image.shape
-#     for i in range(r):
-#         edges = []
-#         for j in range(c):
-#             x = i * c + j
-#             if i + 1 < r:  # pixel below
-#                 y = (i + 1) * c + j
-#                 bp = boundaryPenalty(image[i][j], image[i + 1][j])
-#                 edges.append((x, y, {"capacity": bp}))
-#                 K = max(K, bp)
-#             if j + 1 < c:  # pixel to the right
-#                 y = i * c + j + 1
-#                 bp = boundaryPenalty(image[i][j], image[i][j + 1])
-#                 edges.append((x, y, {"capacity": bp}))
-#                 K = max(K, bp)
-#         graph.add_edges_from(edges)
-#     return K, graph
-
-
-def makeTLinks(graph, seeds, K):
+def make_T_links(graph, seeds, K):
+    """
+    Create the T links of the graph. works inplace.
+    :param graph: The graph to add the T links on
+    :param seeds: The seeds to connect
+    :param K: The capacity of the T links
+    :return: None
+    """
     r, c = seeds.shape
 
     for i in range(r):
@@ -253,7 +278,14 @@ def makeTLinks(graph, seeds, K):
                 graph.add_edge(SINK, x, capacity=K)
 
 
-def displayCut(image, cuts):
+def display_cut(image, cuts):
+    """
+    Draw the cut on the image
+    :param image:The image to draw on
+    :param cuts: The cuts to draw
+    :return: The image with the cuts
+    """
+
     def colorPixel(i, j):
         image[int(i)][int(j)] = CUTCOLOR
 
@@ -266,7 +298,13 @@ def displayCut(image, cuts):
     return image
 
 
-def create_graph_from_img(imagefile, size=None):
+def create_graph_from_img(imagefile: str, size=None):
+    """
+    Create graph from the image
+    :param imagefile: The path of the image
+    :param size: A size for resizing the image
+    :return: The graph created, the image loaded ,the size chosen and the name of the image
+    """
     pathname = os.path.splitext(imagefile)[0]
     image = cv2.imread(imagefile, cv2.IMREAD_GRAYSCALE)
     if size != (None, None):
@@ -279,7 +317,7 @@ def create_graph_from_img(imagefile, size=None):
     sigma = SIGMA
     while True:
         try:
-            graph, seededImage = buildGraph(image, pathname, sigma=sigma)
+            graph, seededImage = build_graph(image, pathname, sigma=sigma)
             print(f"The resolution will be: {image.shape[0]}x{image.shape[1]}")
             size = (int(image.shape[0]), int(image.shape[1]))
             break
@@ -290,7 +328,19 @@ def create_graph_from_img(imagefile, size=None):
     return graph, image, size, pathname
 
 
-def imageSegmentation(graph, image, size, pathname, flag=False, algo=None, algo_name=None, show=False):
+def image_segmentation(graph, image, size, pathname, flag=False, algo=None, algo_name=None, show=False):
+    """
+    The main segmentation workflow
+    :param graph: The graph to work with
+    :param image: The image to segment
+    :param size: A size to resize
+    :param pathname: The name of the image
+    :param algo: The algorithm to use in the segmentation
+    :param algo_name: The name of the algorithm
+    :param flag: A flag for the shortest augmenting path algorithm. if false- use one phase, else- two phases
+    :param show: True to show the segmentation after the calculation
+    :return: The time of the calculation and the size of the image
+    """
     print(algo_name)
 
     sigma = SIGMA
@@ -308,12 +358,12 @@ def imageSegmentation(graph, image, size, pathname, flag=False, algo=None, algo_
             cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK, capacity="capacity", flow_func=algo,
                                                   two_phase=True)
             end_time = time.process_time()
+
         elif "sim_cut" in algo_name:
             start_time = time.time()
             segmentation = algo(graph, SOURCE, SINK)
             end_time = time.time()
-            print(end_time - start_time)
-            # end of calculation - make the data look like the other algorithems
+            # end of calculation - make the data look like the other algorithms
             segmentation = (segmentation.reshape(size))
             imax = (scipy.ndimage.maximum_filter(segmentation, size=3) != segmentation)
             # keep only pixels of original image at borders
@@ -323,12 +373,13 @@ def imageSegmentation(graph, image, size, pathname, flag=False, algo=None, algo_
                 if node < (len(graph) - 2):
                     cuts.append((node, node))
         else:
+            # Normal case
             start_time = time.process_time()
             cut_value, partition = nx.minimum_cut(graph, SOURCE, SINK, capacity="capacity", flow_func=algo)
             end_time = time.process_time()
 
         try:
-            reachable, non_reachable = partition
+            reachable, non_reachable = partition  # This line will fail if we used sim cut
             cutset_clean = set()
             for u, nbrs in ((n, graph[n]) for n in reachable):
                 cutset_clean.update((u, v) for v in nbrs if v in non_reachable)
@@ -339,17 +390,18 @@ def imageSegmentation(graph, image, size, pathname, flag=False, algo=None, algo_
                     found_good_sigma = True
                     cuts = sorted(cutset_clean)
                     print("Can't find a good sigma")
-                graph, seededImage = buildGraph(image, pathname, sigma=sigma)
+                graph, seededImage = build_graph(image, pathname, sigma=sigma)
             else:
                 found_good_sigma = True
                 cuts = sorted(cutset_clean)
         except:
+            # sim cut was used
             break
     print("cuts:")
     print(cuts)
     print("Time to calculate:")
     print(end_time - start_time)
-    image = displayCut(image, cuts)
+    image = display_cut(image, cuts)
     image = cv2.resize(image, (0, 0), fx=SF, fy=SF)
     if show:
         show_image(image)
@@ -361,20 +413,17 @@ def imageSegmentation(graph, image, size, pathname, flag=False, algo=None, algo_
 
 
 if __name__ == "__main__":
-    import networkx.algorithms.flow as algos
-
-
     def dd():
         return defaultdict(dict)
-
-
     all_runs_data = defaultdict(dd)
+
     try:
         with open("pickled_data", "rb") as f:
             all_runs_data = pickle.load(f)
             f.close()
     except:
         pass
+
     if len(sys.argv) > 1:
         MANUAL = True
     target_sizes = [30, 100, None]
@@ -404,8 +453,8 @@ if __name__ == "__main__":
                     continue
                 except:
                     pass
-                run_time, im_size = imageSegmentation(graph, image, size_, pathname, algo=algo, algo_name=algo_name,
-                                                      flag=flag, show=False)
+                run_time, im_size = image_segmentation(graph, image, size_, pathname, algo=algo, algo_name=algo_name,
+                                                       flag=flag, show=False)
                 all_runs_data[algo_name][len(graph)][img_path.replace(".jpg", "")] = run_time
 
             if algo.__name__ == "shortest_augmenting_path" and flag is False:
