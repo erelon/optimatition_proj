@@ -446,7 +446,8 @@ if __name__ == "__main__":
                 algo_name = algo.__name__
 
             run_data = {}
-            for img_path in ["cat_easy.jpg", "cat_a.jpg", "cat_yoy.jpg", "cat_medium.jpg"]:
+            for img_path in ["example cats/cat_easy.jpg", "example cats/cat_a.jpg", "example cats/cat_yoy.jpg",
+                             "example cats/cat_medium.jpg"]:
                 graph, image, size_, pathname = create_graph_from_img(img_path, size=(size, size))
                 try:
                     all_runs_data[algo_name][len(graph)][img_path.replace(".jpg", "")]
