@@ -2,7 +2,7 @@ import networkx
 import numpy
 import scipy.sparse
 import scipy
-# import yappi
+
 
 #   This software is an implementation of the invention in US Patent 8929363
 #   "Method and System for Image Segmentation".
@@ -10,13 +10,12 @@ import scipy
 #   Simulation s-t cut algorithm.
 #   The software applies to the partitioning of undirected graphs provided
 #   two seed nodes "s" and "t".
-from scipy.signal import convolve2d
 
 
 class Circuit(networkx.Graph):
-    def __init__(self,G=None, **attr):
+    def __init__(self, G=None, **attr):
         if G is None:
-            G =super().__init__(**attr)
+            G = super().__init__(**attr)
         self.G = G
 
     def matrix(self):
@@ -63,11 +62,9 @@ class Nonlinear:
     def linearize(self):
         nodes = self.weights.shape[0]
         entries = self.weights.nnz
-        # data = self.weights.tocoo().data
         rows = self.weights.tocoo().row
         columns = self.weights.tocoo().col
         ones = numpy.ones(entries)
-        # negative_ones = -1.0 * numpy.ones(entries)
         positive = scipy.sparse.coo_matrix((ones, (range(0, entries), rows)), shape=(entries, nodes)).tocsr()
         negative = scipy.sparse.coo_matrix((ones, (range(0, entries), columns)), shape=(entries, nodes)).tocsr()
         subtract = positive - negative
@@ -78,12 +75,10 @@ class Nonlinear:
 
 
 def sim_cut(graph: networkx.Graph, s, t):
-    # yappi.set_clock_type("cpu")
-    # yappi.start()
     G = Circuit(graph)
 
     g_len = len(graph) - 3
-    G.G = networkx.relabel_nodes(G.G, {s: g_len + 1, t: g_len + 2},copy=False)
+    G.G = networkx.relabel_nodes(G.G, {s: g_len + 1, t: g_len + 2}, copy=False)
 
     s, t = g_len + 1, g_len + 2
     G.G.nodes[s]['flow'] = 's'
@@ -91,9 +86,6 @@ def sim_cut(graph: networkx.Graph, s, t):
     x = numpy.zeros(len(G.G.nodes()))
     ones = numpy.ones(len(G.G.nodes()))
     W = G.matrix()
-    # rowsum = W * ones
-    # D = scipy.sparse.diags(rowsum, 0)
-    # F = D - W
     f = G.flow()
     s = G.s()
     t = G.t()
@@ -108,13 +100,6 @@ def sim_cut(graph: networkx.Graph, s, t):
         A.data[A.indptr[t]:A.indptr[t + 1]] = 0
         A = A + scipy.sparse.diags(numpy.abs(f), 0)
         x = scipy.sparse.linalg.spsolve(A, 1000000.0 * f)
-        # cut = F * segmentation
-        # cut = numpy.multiply(cut, segmentation)
-        # flow = numpy.sum(cut)
-        # print(0.25 * flow)
     segmentation = numpy.sign(x).astype(int)[:-2]
 
-    # yappi.get_func_stats().print_all()
-    # yappi.stop()
     return segmentation
-
