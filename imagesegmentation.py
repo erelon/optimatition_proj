@@ -221,7 +221,7 @@ def make_N_links(graph, image, sigma=30):
     :param sigma: The sigma to use in the calculation
     :return: The K value for the T links and the graph
     """
-    BOUNDRAY_PENALTY_CONSTANT = -2 * (sigma ** 2)
+    boundray_penalty_constant = -2 * (sigma ** 2)
 
     K = -float("inf")
     r, c = image.shape
@@ -235,9 +235,9 @@ def make_N_links(graph, image, sigma=30):
     Rimage = np.hstack((image, zero_high_vec))[:, 1:]
 
     # Calculate the links between the rows
-    Dimage = 100 * np.exp(((image.astype("int16") - Dimage.astype("int16")) ** 2) / BOUNDRAY_PENALTY_CONSTANT)[:-1, :]
+    Dimage = 100 * np.exp(((image.astype("int16") - Dimage.astype("int16")) ** 2) / boundray_penalty_constant)[:-1, :]
     # Calculate the links between the cols
-    Rimage = 100 * np.exp(((image.astype("int16") - Rimage.astype("int16")) ** 2) / BOUNDRAY_PENALTY_CONSTANT)[:, :-1]
+    Rimage = 100 * np.exp(((image.astype("int16") - Rimage.astype("int16")) ** 2) / boundray_penalty_constant)[:, :-1]
 
     # Create the nodes of the graph and define the capacity of the rows
     for i in range(r - 1):
@@ -298,11 +298,12 @@ def display_cut(image, cuts):
     return image
 
 
-def create_graph_from_img(imagefile: str, size=None):
+def create_graph_from_img(imagefile: str, sigma: int, size=None):
     """
     Create graph from the image
     :param imagefile: The path of the image
     :param size: A size for resizing the image
+    :param sigma: The initial sigma to calculate the capacity with
     :return: The graph created, the image loaded ,the size chosen and the name of the image
     """
     pathname = os.path.splitext(imagefile)[0]
@@ -314,7 +315,6 @@ def create_graph_from_img(imagefile: str, size=None):
         m = min(q, w)
         image = cv2.resize(image, (m, m))
 
-    sigma = SIGMA
     while True:
         try:
             graph, seededImage = build_graph(image, pathname, sigma=sigma)
@@ -328,7 +328,8 @@ def create_graph_from_img(imagefile: str, size=None):
     return graph, image, size, pathname
 
 
-def image_segmentation(graph, image, size, pathname, flag=False, algo=None, algo_name=None, show=False):
+def image_segmentation(graph, image, size, pathname, flag=False, algo=None, algo_name=None, show=False,
+                       sigma: int = 30):
     """
     The main segmentation workflow
     :param graph: The graph to work with
@@ -337,13 +338,13 @@ def image_segmentation(graph, image, size, pathname, flag=False, algo=None, algo
     :param pathname: The name of the image
     :param algo: The algorithm to use in the segmentation
     :param algo_name: The name of the algorithm
+    :param sigma: The sigma to calculate the capacity with
     :param flag: A flag for the shortest augmenting path algorithm. if false- use one phase, else- two phases
     :param show: True to show the segmentation after the calculation
     :return: The time of the calculation and the size of the image
     """
     print(algo_name)
 
-    sigma = SIGMA
     global SOURCE, SINK
     found_good_sigma = False
     while not found_good_sigma:
@@ -413,12 +414,14 @@ def image_segmentation(graph, image, size, pathname, flag=False, algo=None, algo
 
 
 if __name__ == "__main__":
+    sigma = 30
+
+
     def dd():
         return defaultdict(dict)
 
 
     all_runs_data = defaultdict(dd)
-
     try:
         with open("pickled_data", "rb") as f:
             all_runs_data = pickle.load(f)
@@ -448,7 +451,7 @@ if __name__ == "__main__":
             run_data = {}
             for img_path in ["example cats/cat_easy.jpg", "example cats/cat_a.jpg", "example cats/cat_yoy.jpg",
                              "example cats/cat_medium.jpg"]:
-                graph, image, size_, pathname = create_graph_from_img(img_path, size=(size, size))
+                graph, image, size_, pathname = create_graph_from_img(img_path, sigma=sigma, size=(size, size))
                 try:
                     all_runs_data[algo_name][len(graph)][img_path.replace(".jpg", "")]
                     # This data was collected already - skip it
@@ -456,7 +459,7 @@ if __name__ == "__main__":
                 except:
                     pass
                 run_time, im_size = image_segmentation(graph, image, size_, pathname, algo=algo, algo_name=algo_name,
-                                                       flag=flag, show=False)
+                                                       flag=flag, show=False, sigma=sigma)
                 # Save the runtime data
                 all_runs_data[algo_name][len(graph)][img_path.replace(".jpg", "")] = run_time
 
