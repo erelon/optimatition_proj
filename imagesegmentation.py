@@ -4,7 +4,7 @@ import datetime
 import pickle
 import time
 from collections import defaultdict
-
+import sys
 import matplotlib.pyplot as plt
 import cv2
 import networkx as nx
@@ -26,6 +26,11 @@ OBJ, BKG = "OBJ", "BKG"
 CUTCOLOR = (0, 0, 255)
 SOURCE, SINK = -2, -1
 
+# plant seeds option
+MANUAL = False
+# plant seeds only ones for every image size and type
+MANUAL_FIRST = False
+
 SF = 10
 LOADSEEDS = False
 
@@ -38,8 +43,72 @@ def show_image(image):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+def plantSeed_manual(image, m):
+    first = MANUAL_FIRST
+    if first:
+        f = open("seeds1.txt", 'a')
+        shape_str = 'none' if  image.shape[0] > 100 else str(image.shape[0])
+        f.write(m.split('.')[0]+"_"+shape_str+"\n")
+
+
+    def drawLines(x, y, pixelType):
+        if first:
+            f.write(str(x)+' '+str(y)+"\n")
+        if pixelType == OBJ:
+            color, code = OBJCOLOR, OBJCODE
+        else:
+            color, code = BKGCOLOR, BKGCODE
+        cv2.circle(image, (x, y), radius, color, thickness)
+        cv2.circle(seeds, (x // SF, y // SF), radius // SF, code, thickness)
+
+    def onMouse(event, x, y, flags, pixelType):
+
+        global drawing
+        if event == cv2.EVENT_LBUTTONDOWN:
+            drawing = True
+            drawLines(x, y, pixelType)
+        elif event == cv2.EVENT_MOUSEMOVE and drawing:
+            drawLines(x, y, pixelType)
+        elif event == cv2.EVENT_LBUTTONUP:
+            drawing = False
+
+    def paintSeeds(pixelType):
+        print("Planting", pixelType, "seeds")
+        global drawing
+        drawing = False
+        windowname = "Plant " + pixelType + " seeds"
+        cv2.namedWindow(windowname, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(windowname, 500, 500)
+        cv2.setMouseCallback(windowname, onMouse, pixelType)
+        while (1):
+            cv2.imshow(windowname, image)
+            if cv2.waitKey(1) & 0xFF == 27:
+                break
+        if first:
+            f.write("#\n")
+        cv2.destroyAllWindows()
+
+    seeds = np.zeros(image.shape, dtype="uint8")
+    image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    image = cv2.resize(image, (0, 0), fx=SF, fy=SF)
+
+    radius = 10
+    thickness = -1  # fill the whole circle
+    global drawing
+    drawing = False
+
+    paintSeeds(OBJ)
+    paintSeeds(BKG)
+    if first:
+        f.close()
+    return seeds, image
+
 
 def plantSeed(image, pathname):
+    seeds_file = "seeds.txt"
+    if MANUAL:
+        seeds_file = "seeds1.txt"
+
     def drawLines(x, y, pixelType):
         code = BKGCODE
         if pixelType == OBJ:
@@ -49,7 +118,7 @@ def plantSeed(image, pathname):
 
     seeds = np.zeros(image.shape, dtype="uint8")
 
-    f = open("seeds.txt", "r")
+    f = open(seeds_file, "r")
     size = image.shape[0]
     if size > 100: size = "none"
     line_str = pathname + "_" + str(size) + "\n"
@@ -71,6 +140,7 @@ def plantSeed(image, pathname):
     f.close()
 
     return seeds, None
+#
 
 
 def buildGraph(image, pathname, sigma=30):
@@ -79,7 +149,11 @@ def buildGraph(image, pathname, sigma=30):
         raise MemoryError
     graph = nx.Graph()
     K, graph = makeNLinks(graph, image, sigma=sigma)
-    seeds, seededImage = plantSeed(image, pathname)
+    if MANUAL_FIRST and MANUAL:
+        seeds, seededImage = plantSeed_manual(image, pathname)
+    else:
+        seeds, seededImage = plantSeed(image, pathname)
+
     makeTLinks(graph, seeds, K)
 
     # # Fast way to save the seeds on the image
@@ -301,10 +375,12 @@ if __name__ == "__main__":
             f.close()
     except:
         pass
-
+    if len(sys.argv) > 1:
+        MANUAL = True
     target_sizes = [30, 100, None]
     for size in target_sizes:
         flag = False
+        MANUAL_FIRST = True
         for algo in [algos.preflow_push,
                      sim_cut]:  # sim_cut, algos.boykov_kolmogorov, algos.preflow_push,algos.shortest_augmenting_path,algos.shortest_augmenting_path]:
             # , algos.dinitz, algos.edmonds_karp,
@@ -338,6 +414,7 @@ if __name__ == "__main__":
             with open("pickled_data", "wb") as f:
                 pickle.dump(all_runs_data, f)
                 f.close()
+            MANUAL_FIRST = False
 
     index_of_free_size = target_sizes.index(None)
     for algo_name, D_1 in zip(all_runs_data.keys(), all_runs_data.values()):
