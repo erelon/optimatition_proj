@@ -415,6 +415,8 @@ def image_segmentation(graph, image, size, pathname, flag=False, algo=None, algo
 if __name__ == "__main__":
     def dd():
         return defaultdict(dict)
+
+
     all_runs_data = defaultdict(dd)
 
     try:
@@ -430,11 +432,10 @@ if __name__ == "__main__":
     for size in target_sizes:
         flag = False
         MANUAL_FIRST = True
-        for algo in [algos.preflow_push,
-                     sim_cut]:  # sim_cut, algos.boykov_kolmogorov, algos.preflow_push,algos.shortest_augmenting_path,algos.shortest_augmenting_path]:
-            # , algos.dinitz, algos.edmonds_karp,
-            # ]:
+        for algo in [algos.preflow_push, sim_cut, algos.boykov_kolmogorov, algos.shortest_augmenting_path,
+                     algos.shortest_augmenting_path, algos.dinitz, algos.edmonds_karp]:
 
+            # Save the algorithm nam for saving
             if algo.__name__ == "shortest_augmenting_path" and flag is False:
                 algo_name = algo.__name__ + " one phase"
             elif algo.__name__ == "shortest_augmenting_path" and flag is True:
@@ -449,22 +450,26 @@ if __name__ == "__main__":
                 graph, image, size_, pathname = create_graph_from_img(img_path, size=(size, size))
                 try:
                     all_runs_data[algo_name][len(graph)][img_path.replace(".jpg", "")]
-                    # This data was collected allready
+                    # This data was collected already - skip it
                     continue
                 except:
                     pass
                 run_time, im_size = image_segmentation(graph, image, size_, pathname, algo=algo, algo_name=algo_name,
                                                        flag=flag, show=False)
+                # Save the runtime data
                 all_runs_data[algo_name][len(graph)][img_path.replace(".jpg", "")] = run_time
 
             if algo.__name__ == "shortest_augmenting_path" and flag is False:
+                # Flip the flag so that the two phase version will happen next time
                 flag = True
 
+            # Save the runtime data
             with open("pickled_data", "wb") as f:
                 pickle.dump(all_runs_data, f)
                 f.close()
             MANUAL_FIRST = False
 
+    # Show runtime plot:
     index_of_free_size = target_sizes.index(None)
     for algo_name, D_1 in zip(all_runs_data.keys(), all_runs_data.values()):
         all_avg_times_of_all_sizes = []
