@@ -331,7 +331,7 @@ def create_graph_from_img(imagefile: str, sigma: int, size=None):
 
 
 def image_segmentation(graph, image, size, pathname, flag=False, algo=None, algo_name=None, show=False,
-                       sigma: int = 30):
+                       sigma: int = 30, sim_cut_i=20):
     """
     The main segmentation workflow
     :param graph: The graph to work with
@@ -364,7 +364,7 @@ def image_segmentation(graph, image, size, pathname, flag=False, algo=None, algo
 
         elif "sim_cut" in algo_name:
             start_time = time.time()
-            segmentation = algo(graph, SOURCE, SINK)
+            segmentation = algo(graph, SOURCE, SINK, sim_cut_i=sim_cut_i)
             end_time = time.time()
             # end of calculation - make the data look like the other algorithms
             segmentation = (segmentation.reshape(size))
@@ -409,7 +409,7 @@ def image_segmentation(graph, image, size, pathname, flag=False, algo=None, algo
     if show:
         show_image(image)
     os.makedirs(f"{pathname} results", exist_ok=True)
-    savename = f"{pathname} results/ {algo_name}_{size}_result.jpg"
+    savename = f"{pathname} results/{algo_name}_{size}_result.jpg"
     cv2.imwrite(savename, image)
     print("Saved image as", savename)
     return end_time - start_time, len(graph)
@@ -418,15 +418,18 @@ def image_segmentation(graph, image, size, pathname, flag=False, algo=None, algo
 def parseArgs(algo_options_dict, default_images):
     parser = argparse.ArgumentParser()
     parser.add_argument(*["-p", "--paths", "--imagefile"], type=str, nargs="*", default=default_images,
-                        help="Path of images. could be one or more. defualt is an example of 4 cats.")
+                        help="Path of images. could be one or more. default is an example of 4 cats.")
     parser.add_argument("--size", "-s",
                         default="30", type=str,
-                        help="The resize value. Defaults to 30x30. None for maximum resolution")
+                        help="The resize value. Takes only one number. Defaults to 30 (30x30). None for maximum "
+                             "resolution.")
     parser.add_argument("--algos", "-a", default=["bk"], nargs='*',
                         choices=["all", *algo_options_dict.keys()],
-                        help="The algorithms to use in this run. one or more. default is boyokov kolmagorov")
+                        help="The algorithms to use in this run. one or more. default is boyokov kolmagorov.")
     parser.add_argument("--sigma", default=30, type=int,
-                        help="The sigma to use in the capacity calculations. defualt is 30.")
+                        help="The sigma to use in the capacity calculations. default is 30.")
+    parser.add_argument("-i", "-iter", "--iterations", default=20, type=int,
+                        help="Number of iterations if sim cut is one of the algorithms. default is 20.")
 
     return parser.parse_args()
 
@@ -440,6 +443,7 @@ if __name__ == "__main__":
     args = parseArgs(algo_options_dict, default_images)
     sigma = args.sigma
     images = args.paths
+    sim_cut_i = args.i
     manual = (images != default_images)
     try:
         size = int(args.size)
@@ -498,7 +502,7 @@ if __name__ == "__main__":
                 except:
                     pass
                 run_time, im_size = image_segmentation(graph, image, size_, pathname, algo=algo, algo_name=algo_name,
-                                                       flag=flag, show=False, sigma=sigma)
+                                                       flag=flag, show=False, sigma=sigma, sim_cut_i=sim_cut_i)
                 # Save the runtime data
                 all_runs_data[algo_name][len(graph)][img_path.replace(".jpg", "")] = run_time
 

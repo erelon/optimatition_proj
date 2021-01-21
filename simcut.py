@@ -74,7 +74,7 @@ class Nonlinear:
         return matrix
 
 
-def sim_cut(graph: networkx.Graph, s, t):
+def sim_cut(graph: networkx.Graph, s, t,sim_cut_i=20):
     G = Circuit(graph)
 
     g_len = len(graph) - 3
@@ -90,7 +90,7 @@ def sim_cut(graph: networkx.Graph, s, t):
     s = G.s()
     t = G.t()
     N = Nonlinear(W)
-    for iteration in range(0, 20):
+    for iteration in range(0, sim_cut_i):
         N.set_voltage(x)
         L = N.linearize()
         rowsum = L * ones
