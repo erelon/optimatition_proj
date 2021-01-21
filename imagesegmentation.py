@@ -409,7 +409,7 @@ def image_segmentation(graph, image, size, pathname, flag=False, algo=None, algo
     if show:
         show_image(image)
     os.makedirs(f"{pathname} results", exist_ok=True)
-    savename = f"{pathname} results/{algo_name}_{size}_result.jpg"
+    savename = f"{pathname} results/ {algo_name}_{size}_result.jpg"
     cv2.imwrite(savename, image)
     print("Saved image as", savename)
     return end_time - start_time, len(graph)
@@ -451,6 +451,8 @@ if __name__ == "__main__":
         size = None
     if "all" in args.algos:
         algorithms = algo_options_dict.values()
+        # Add shortest augmenting path two phase
+        algorithms.append(algos.shortest_augmenting_path)
     else:
         algorithms = [algo_options_dict[i] for i in args.algos]
 
@@ -486,7 +488,7 @@ if __name__ == "__main__":
             elif algo.__name__ == "shortest_augmenting_path" and flag is True:
                 algo_name = algo.__name__ + " two phase"
             elif algo.__name__ == "sim_cut":
-                algo_name = "sim_cut_20_iter_better_implement"
+                algo_name = f"sim_cut_{sim_cut_i}_iter_better_implement"
             else:
                 algo_name = algo.__name__
 
