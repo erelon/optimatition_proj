@@ -1,7 +1,10 @@
 from __future__ import division
 
+import argparse
+
 import networkx.algorithms.flow as algos
 import matplotlib.pyplot as plt
+from scipy import ndimage
 import networkx as nx
 import numpy as np
 import pickle
@@ -19,7 +22,6 @@ OBJCODE, BKGCODE = 1, 2
 OBJ, BKG = "OBJ", "BKG"
 CUTCOLOR = (0, 0, 255)
 SOURCE, SINK = -2, -1
-SIGMA = 30
 SF = 10
 
 # plant seeds option
@@ -189,7 +191,7 @@ def build_graph(image: np.ndarray, pathname: str, sigma: int = 30, save_seeded_i
     if MANUAL_FIRST and MANUAL:
         seeds, seededImage = plant_seed_manual(image, pathname)
     else:
-        seeds, seededImage = plant_seed(image, pathname)
+        seeds, seededImage = plant_seed(image, pathname.split("/")[-1])
 
     make_T_links(graph, seeds, K)
 
@@ -221,7 +223,7 @@ def make_N_links(graph, image, sigma=30):
     :param sigma: The sigma to use in the calculation
     :return: The K value for the T links and the graph
     """
-    boundray_penalty_constant = -2 * (sigma ** 2)
+    boundray_penalty_constant = -2 * pow(sigma, 2)
 
     K = -float("inf")
     r, c = image.shape
@@ -235,9 +237,9 @@ def make_N_links(graph, image, sigma=30):
     Rimage = np.hstack((image, zero_high_vec))[:, 1:]
 
     # Calculate the links between the rows
-    Dimage = 100 * np.exp(((image.astype("int16") - Dimage.astype("int16")) ** 2) / boundray_penalty_constant)[:-1, :]
+    Dimage = 100 * np.exp(((image.astype("int32") - Dimage.astype("int32")) ** 2) / boundray_penalty_constant)[:-1, :]
     # Calculate the links between the cols
-    Rimage = 100 * np.exp(((image.astype("int16") - Rimage.astype("int16")) ** 2) / boundray_penalty_constant)[:, :-1]
+    Rimage = 100 * np.exp(((image.astype("int32") - Rimage.astype("int32")) ** 2) / boundray_penalty_constant)[:, :-1]
 
     # Create the nodes of the graph and define the capacity of the rows
     for i in range(r - 1):
@@ -254,7 +256,7 @@ def make_N_links(graph, image, sigma=30):
         a = np.vstack((x, y, s)).T
         graph.add_weighted_edges_from(a, weight="capacity")
     # Define K to be the maximum capacity in the graph
-    K = max(max(K, Dimage.max()), max(K, Rimage.max()))
+    K = max([c["capacity"] for s, t, c in graph.edges(data=True)])
 
     return K, graph
 
@@ -413,8 +415,40 @@ def image_segmentation(graph, image, size, pathname, flag=False, algo=None, algo
     return end_time - start_time, len(graph)
 
 
+def parseArgs(algo_options_dict, default_images):
+    parser = argparse.ArgumentParser()
+    parser.add_argument(*["-p", "--paths", "--imagefile"], type=str, nargs="*", default=default_images,
+                        help="Path of images. could be one or more. defualt is an example of 4 cats.")
+    parser.add_argument("--size", "-s",
+                        default="30", type=str,
+                        help="The resize value. Defaults to 30x30. None for maximum resolution")
+    parser.add_argument("--algos", "-a", default=["bk"], nargs='*',
+                        choices=["all", *algo_options_dict.keys()],
+                        help="The algorithms to use in this run. one or more. default is boyokov kolmagorov")
+    parser.add_argument("--sigma", default=30, type=int,
+                        help="The sigma to use in the capacity calculations. defualt is 30.")
+
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    sigma = 30
+    algo_options_dict = {"pp": algos.preflow_push, "sc": sim_cut, "bk": algos.boykov_kolmogorov,
+                         "sap": algos.shortest_augmenting_path, "dinitz": algos.dinitz, "d": algos.dinitz,
+                         "ek": algos.edmonds_karp}
+    default_images = ["example cats/cat_easy.jpg", "example cats/cat_a.jpg", "example cats/cat_yoy.jpg",
+                      "example cats/cat_medium.jpg"]
+    args = parseArgs(algo_options_dict, default_images)
+    sigma = args.sigma
+    images = args.paths
+    manual = (images != default_images)
+    try:
+        size = int(args.size)
+    except:
+        size = None
+    if "all" in args.algos:
+        algorithms = algo_options_dict.values()
+    else:
+        algorithms = [algo_options_dict[i] for i in args.algos]
 
 
     def dd():
@@ -423,21 +457,25 @@ if __name__ == "__main__":
 
     all_runs_data = defaultdict(dd)
     try:
-        with open("pickled_data", "rb") as f:
-            all_runs_data = pickle.load(f)
-            f.close()
+        if not manual:
+            with open("pickled_data", "rb") as f:
+                all_runs_data = pickle.load(f)
+                f.close()
     except:
         pass
 
     if len(sys.argv) > 1:
-        MANUAL = True
-    target_sizes = [30, 100, None]
+        MANUAL = manual
+
+    if manual:
+        target_sizes = [size]
+    else:
+        target_sizes = [30, 100, None]
+
     for size in target_sizes:
         flag = False
         MANUAL_FIRST = True
-        for algo in [algos.preflow_push, sim_cut, algos.boykov_kolmogorov, algos.shortest_augmenting_path,
-                     algos.shortest_augmenting_path, algos.dinitz, algos.edmonds_karp]:
-
+        for algo in algorithms:
             # Save the algorithm nam for saving
             if algo.__name__ == "shortest_augmenting_path" and flag is False:
                 algo_name = algo.__name__ + " one phase"
@@ -449,11 +487,12 @@ if __name__ == "__main__":
                 algo_name = algo.__name__
 
             run_data = {}
-            for img_path in ["example cats/cat_easy.jpg", "example cats/cat_a.jpg", "example cats/cat_yoy.jpg",
-                             "example cats/cat_medium.jpg"]:
+            for img_path in images:
                 graph, image, size_, pathname = create_graph_from_img(img_path, sigma=sigma, size=(size, size))
                 try:
-                    all_runs_data[algo_name][len(graph)][img_path.replace(".jpg", "")]
+                    all_runs_data[algo_name][len(graph)][
+                        img_path.split("/")[-1].replace(".jpg", "").replace(".png", "")]
+
                     # This data was collected already - skip it
                     continue
                 except:
