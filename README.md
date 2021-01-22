@@ -26,7 +26,7 @@ We used the following function:
 4. Karger's algorithm[wiki](https://en.wikipedia.org/wiki/Karger%27s_algorithm)
 5. Push–relabel algorithm [wiki](https://en.wikipedia.org/wiki/Push%E2%80%93relabel_maximum_flow_algorithm)
 6. Boykov kolmogorov [article](https://discovery.ucl.ac.uk/id/eprint/13383/1/13383.pdf)
-7. Sim cut [article](https://en.wikibooks.org/wiki/Algorithm_Implementation/Graphs/Maximum_flow/Sim_Cut)
+7. Sim cut [wiki](https://en.wikibooks.org/wiki/Algorithm_Implementation/Graphs/Maximum_flow/Sim_Cut)
 
 ### Get started 
 1. install all dependencies 
