@@ -443,7 +443,7 @@ if __name__ == "__main__":
     args = parseArgs(algo_options_dict, default_images)
     sigma = args.sigma
     images = args.paths
-    sim_cut_i = args.i
+    sim_cut_i = args.iterations
     manual = (images != default_images)
     try:
         size = int(args.size)
@@ -519,7 +519,10 @@ if __name__ == "__main__":
             MANUAL_FIRST = False
 
     # Show runtime plot:
-    index_of_free_size = target_sizes.index(None)
+    try:
+        index_of_free_size = target_sizes.index(None)
+    except:
+        index_of_free_size = -1
     for algo_name, D_1 in zip(all_runs_data.keys(), all_runs_data.values()):
         all_avg_times_of_all_sizes = []
         sizes = []
