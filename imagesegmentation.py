@@ -450,7 +450,7 @@ if __name__ == "__main__":
     except:
         size = None
     if "all" in args.algos:
-        algorithms = algo_options_dict.values()
+        algorithms = [i for i in algo_options_dict.values()]
         # Add shortest augmenting path two phase
         algorithms.append(algos.shortest_augmenting_path)
     else:
@@ -506,7 +506,7 @@ if __name__ == "__main__":
                 run_time, im_size = image_segmentation(graph, image, size_, pathname, algo=algo, algo_name=algo_name,
                                                        flag=flag, show=False, sigma=sigma, sim_cut_i=sim_cut_i)
                 # Save the runtime data
-                all_runs_data[algo_name][len(graph)][img_path.replace(".jpg", "")] = run_time
+                all_runs_data[algo_name][len(graph)][img_path.split("/")[-1].replace(".jpg", "").replace(".png", "")] = run_time
 
             if algo.__name__ == "shortest_augmenting_path" and flag is False:
                 # Flip the flag so that the two phase version will happen next time
