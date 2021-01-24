@@ -417,14 +417,14 @@ def image_segmentation(graph, image, size, pathname, flag=False, algo=None, algo
 
 def parseArgs(algo_options_dict, default_images):
     parser = argparse.ArgumentParser()
-    parser.add_argument(*["-p", "--paths", "--imagefile"], type=str, nargs="*", default=default_images,
+    parser.add_argument("-p", "--paths", "--imagefile", type=str, nargs="*", default=default_images,
                         help="Path of images. could be one or more. default is an example of 4 cats.")
     parser.add_argument("--size", "-s",
                         default="30", type=str,
-                        help="The resize value. Takes only one number. Defaults to 30 (30x30). None for maximum "
+                        help="The resize value. Takes only one number. Defaults to 30 (30x30).Type 'None' for maximum "
                              "resolution.")
     parser.add_argument("--algos", "-a", default=["bk"], nargs='*',
-                        choices=["all", *algo_options_dict.keys()],
+                        choices=["all", *[o for o in algo_options_dict.keys()]],
                         help="The algorithms to use in this run. one or more. default is boyokov kolmagorov.")
     parser.add_argument("--sigma", default=30, type=int,
                         help="The sigma to use in the capacity calculations. default is 30.")
